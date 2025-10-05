@@ -196,7 +196,6 @@ def stratify_dataset(dataset: Iterable[Any], target_samples: int, seed: int) -> 
 
 def build_stratification_key(sample: Sample) -> Tuple:
     """Builds a key for stratification based on language and safety labels."""
-    # FIX: Extract language from the metadata dictionary
     language = sample.get('metadata', {}).get('language', 'en')
 
     prompt_violations = sample.get("prompt_safety_categories")

@@ -44,7 +44,6 @@ chat_message = [
     {"role": "user", "content": USER_PROMPT.format(prompt=user, response=llm)},
 ]
 
-# build input using tokenizer.apply_chat_template if available, else fallback
 try:
     model_input = tokenizer.apply_chat_template(
         chat_message,
@@ -57,35 +56,24 @@ except Exception:
     full_text = SYSTEM_PROMPT + "\n\n" + USER_PROMPT.format(prompt=user, response=llm)
     model_input = tokenizer(full_text, return_tensors="pt", truncation=True)
 
-# --- Sharding-aware device handling and generation ---
-# compute input length before moving tensors
 if "input_ids" not in model_input:
     raise RuntimeError("Tokenizer did not return 'input_ids' in model_input")
 input_ids = model_input["input_ids"]
 input_len = input_ids.shape[1]
 
-# detect model parameter devices (ignore 'meta' if present)
 param_devices = {p.device for p in model.parameters() if p.device is not None}
 non_meta = {d for d in param_devices if getattr(d, "type", None) != "meta"}
 
-# If model parameters live on exactly one real device, move inputs to that device.
-# If the model is sharded across multiple devices (device_map="auto"), leave inputs on CPU
-# so generate() can handle device placement.
 if len(non_meta) == 1:
     target_dev = next(iter(non_meta))
     model_input = {k: v.to(target_dev) for k, v in model_input.items()}
-# else: leave model_input on CPU
 
 gen_kwargs = {"max_new_tokens": 100, "pad_token_id": tokenizer.pad_token_id, "eos_token_id": tokenizer.eos_token_id}
 
 with torch.no_grad():
     outputs = model.generate(**model_input, **gen_kwargs)
 
-# move generated ids to CPU and slice off the input prompt
 generated_ids = outputs[0].cpu().tolist()
 decoded = tokenizer.decode(outputs[0], skip_special_tokens=False)
-# print("---- FULL DECODED (raw) ----")
-# print(decoded)
-# print("---- END ----")
 pred_ids = generated_ids[input_len:]
 print(tokenizer.decode(pred_ids, skip_special_tokens=True))
